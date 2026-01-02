@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime
+from charts import temperature_line_chart
 
 st.set_page_config(page_title="Weather App", 
                    layout="centered")
@@ -13,6 +14,7 @@ initial_states = {
     "current_city": "",
     "current_week_day": "",
     "weather_description": ["",""],
+    "week_temeprature_data": "",
     "past_temp": 0,
     "temp_diff": 0,
     "temp_unit": "",
@@ -94,7 +96,6 @@ def GET_DATA(id):
     hourly_description_text = [decode_weathercode(c)[1] for c in hourly_code]
     hourly_description_emoji = [decode_weathercode(c)[0] for c in hourly_code]
     
-    st.write()
     if (current_time[:-2] + "00") == current_time:
         st.session_state.past_temp = hourly_temperature[hourly_time.index(current_time) - 1]
     else:
@@ -125,22 +126,25 @@ def GET_DATA(id):
 
             week_dict[day].loc[0, "time"] = current_time
             week_dict[day].loc[0, "temperature_2m"] = current_temperature
-
-        if len(week_dict[day]) > 8:
-            week_dict[day] = week_dict[day].iloc[
-                np.linspace(0, len(week_dict[day]) - 1, 8).astype(int)
-            ].reset_index(drop=True)
+            if len(week_dict[day]) > 8:
+                week_dict[day] = week_dict[day].iloc[
+                    np.linspace(0, len(week_dict[day]) - 1, 8).astype(int)
+                ].reset_index(drop=True)
         else:
             week_dict[day] = week_dict[day].iloc[::3].reset_index(drop=True)
+    for day in week_dict:
+        week_dict[day]["time"] = pd.to_datetime(
+            week_dict[day]["time"]
+        ).dt.strftime("%H:%M")
 
     st.write(week_dict)
-
     st.session_state.current_temp = current_temperature
     st.session_state.current_time = current_time
     st.session_state.current_week_day = get_week_day(current_time)
     st.session_state.weather_description = decode_weathercode(current_code)
     st.session_state.temp_diff = st.session_state.current_temp - st.session_state.past_temp
     st.session_state.temp_unit = temp_unit
+    st.session_state.week_temeprature_data = week_dict
 
 def search_city(city):
     with st.spinner("Wait for it..."):
@@ -211,14 +215,22 @@ with col0:
                     )
 with col1:
     st.image("https://png.pngtree.com/thumb_back/fh260/background/20240408/pngtree-clouds-in-sky-sky-in-summer-weather-upstairs-summer-day-image_15651093.jpg", 
-             width="stretch"
+             width="stretch",
              )
 
 col3, col4 = st.columns([2, 1], vertical_alignment="center")
 with col3:
     tab1, tab2, tab3 = st.tabs(["Temperature", "Rain", "Wind"])
     with tab1:
-        st.write("In progress")
+        @st.fragment
+        def render_chart():
+            fig = temperature_line_chart(st.session_state.week_temeprature_data[st.session_state.current_week_day], "time", 'temperature_2m')
+            clicked_data = st.plotly_chart(fig, theme="streamlit", on_select="rerun", config={"displayModeBar": False})
+            if clicked_data:
+                st.write(clicked_data)
+
+        render_chart()
+
     with tab2:
         st.write("In progress")
     with tab3:
@@ -229,3 +241,4 @@ with col4:
                     text_alignment="center",
                     unsafe_allow_html=True,
                     )
+
