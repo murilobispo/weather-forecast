@@ -71,11 +71,12 @@ def decode_weathercode(code):
 
 def GET_DATA(id):
     url = "https://api.open-meteo.com/v1/forecast"
+    weather_variables = ["temperature_2m", "weather_code", "wind_speed_10m", "wind_direction_10m", "rain", "is_day", "precipitation_probability"]
     params = {
         "latitude": id["lat"],
         "longitude": id["lon"],
-        "hourly": ["temperature_2m", "weather_code"],
-        "current": ["temperature_2m", "weather_code"],
+        "hourly":  weather_variables,
+        "current": weather_variables,
         "temperature_unit": "celsius",
         "timezone":"auto",
     }
@@ -84,7 +85,7 @@ def GET_DATA(id):
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     data = response.json()
-    #st.write(data)
+    st.write(data)
     
     current_temperature = data["current"]["temperature_2m"]
     current_time = data["current"]["time"]
@@ -194,12 +195,15 @@ if city_input:
 
 @st.fragment
 def main():
-    week_options = st.segmented_control(label="Week Selection",
-                                        label_visibility="collapsed",
-                                        options = st.session_state.week_temperature_data,
-                                        format_func = lambda x: x[:3],
-                                        default = st.session_state.current_week_day
-                                        )
+    if "current_week_day" not in st.session_state or st.session_state.current_week_day not in st.session_state.week_temperature_data:
+        st.session_state.current_week_day = list(st.session_state.week_temperature_data.keys())[0]
+    st.segmented_control(
+        label="Week Selection",
+        label_visibility="collapsed",
+        options=list(st.session_state.week_temperature_data.keys()),
+        format_func=lambda x: x[:3],
+        key="current_week_day"
+    )
 
     col0, col1 = st.columns([2,1],
                             vertical_alignment="center",
@@ -231,7 +235,9 @@ def main():
         tab1, tab2, tab3 = st.tabs(["Temperature", "Rain", "Wind"])
         with tab1:
             fig = temperature_line_chart(st.session_state.week_temperature_data[st.session_state.current_week_day], "time", 'temperature_2m')
-            st.plotly_chart(fig, theme="streamlit", config={"displayModeBar": False})
+            chart = st.plotly_chart(fig, theme="streamlit", on_select="rerun", config={"displayModeBar": False})
+            if chart:
+                st.write(chart)
 
     with col4:
         st.markdown(body=f"Rain<br>Humidity<br>Wind",
