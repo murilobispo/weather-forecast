@@ -9,16 +9,15 @@ st.set_page_config(page_title="Weather App",
                    layout="centered")
 
 initial_states = {
-    "current_temp": 0,
-    "current_time": "",
     "current_city": "",
-    "current_week_day": "",
-    "weather_description": ["",""],
-    "week_temperature_data": "",
-    "past_temp": 0,
+    "weather_data": "",
     "temp_diff": 0,
+    "temp_diff_f": 0,
     "temp_unit": "",
+    "temp_metric": 0,
+    "current_week_day": "",
 }
+
 for key, value in initial_states.items():
     if key not in st.session_state:
         st.session_state[key] = value
@@ -27,57 +26,76 @@ def get_week_day(time):
     dt = datetime.strptime(time, "%Y-%m-%dT%H:%M")
     return dt.strftime("%A").lower()
 
-def decode_weathercode(code):
+def decode_wind_direction(angle):
+    directions = [
+        ("N", "North"),
+        ("NE", "Northeast"),
+        ("E", "East"),
+        ("SE", "Southeast"),
+        ("S", "South"),
+        ("SW", "Southwest"),
+        ("W", "West"),
+        ("NW", "Northwest")
+    ]
+    index = int((angle + 22.5) % 360 // 45)
+    return [directions[index][0], directions[index][1]]
+
+def decode_weathercode(code, is_day=1):
     weather_map = {
         # Sky and Clouds
-        0:  ["☀️", "Clear sky"],
-        1:  ["🌤️", "Mainly clear"],
-        2:  ["⛅", "Partly cloudy"],
-        3:  ["☁️", "Overcast"],
+        0:  ["☀️", "🌙", "Clear sky"],
+        1:  ["🌤️", "🌙", "Mainly clear"],
+        2:  ["⛅", "☁️", "Partly cloudy"],
+        3:  ["☁️", "☁️", "Overcast"],
         # Fog
-        45: ["🌫️", "Fog"],
-        48: ["🌫️", "Depositing rime fog"],
+        45: ["🌫️", "🌫️", "Fog"],
+        48: ["🌫️", "🌫️", "Depositing rime fog"],
         # Drizzle
-        51: ["🌦️", "Light drizzle"],
-        53: ["🌦️", "Moderate drizzle"],
-        55: ["🌦️", "Dense drizzle"],
-        56: ["❄️", "Light freezing drizzle"],
-        57: ["❄️", "Dense freezing drizzle"],
+        51: ["🌦️", "🌧️", "Light drizzle"],
+        53: ["🌦️", "🌧️", "Moderate drizzle"],
+        55: ["🌦️", "🌧️", "Dense drizzle"],
+        56: ["❄️", "❄️", "Light freezing drizzle"],
+        57: ["❄️", "❄️", "Dense freezing drizzle"],
         # Rain
-        61: ["💧", "Slight rain"],
-        63: ["🌧️", "Moderate rain"],
-        65: ["🌧️", "Heavy rain"],
-        66: ["❄️", "Light freezing rain"],
-        67: ["❄️", "Heavy freezing rain"],
+        61: ["💧", "💧", "Slight rain"],
+        63: ["🌧️", "🌧️", "Moderate rain"],
+        65: ["🌧️", "🌧️", "Heavy rain"],
+        66: ["❄️", "❄️", "Light freezing rain"],
+        67: ["❄️", "❄️", "Heavy freezing rain"],
         # Snow
-        71: ["🌨️", "Slight snow fall"],
-        73: ["🌨️", "Moderate snow fall"],
-        75: ["❄️", "Heavy snow fall"],
-        77: ["🌨️", "Snow grains"],
+        71: ["🌨️", "🌨️", "Slight snow fall"],
+        73: ["🌨️", "🌨️", "Moderate snow fall"],
+        75: ["❄️", "❄️", "Heavy snow fall"],
+        77: ["🌨️", "🌨️", "Snow grains"],
         # Rain Showers
-        80: ["🌦️", "Slight rain showers"],
-        81: ["🌧️", "Moderate rain showers"],
-        82: ["🌧️", "Violent rain showers"],
+        80: ["🌦️", "🌧️", "Slight rain showers"],
+        81: ["🌧️", "🌧️", "Moderate rain showers"],
+        82: ["🌧️", "🌧️", "Violent rain showers"],
         # Snow Showers
-        85: ["🌨️", "Slight snow showers"],
-        86: ["❄️", "Heavy snow showers"],
+        85: ["🌨️", "🌨️", "Slight snow showers"],
+        86: ["❄️", "❄️", "Heavy snow showers"],
         # Thunderstorms
-        95: ["⛈️", "Thunderstorm"],
-        96: ["⛈️", "Thunderstorm with slight hail"],
-        99: ["🌩️", "Thunderstorm with heavy hail"]
+        95: ["⛈️", "⛈️", "Thunderstorm"],
+        96: ["⛈️", "⛈️", "Thunderstorm with slight hail"],
+        99: ["🌩️", "🌩️", "Thunderstorm with heavy hail"]
     }
     
-    return weather_map.get(code, ["🌡️", "Unknown"])
+    result = weather_map.get(code, ["🌡️", "🌡️", "Unknown"])
+    emoji = result[0] if is_day else result[1]
+    description = result[2]
+    
+    return [emoji, description]
 
 def GET_DATA(id):
     url = "https://api.open-meteo.com/v1/forecast"
-    weather_variables = ["temperature_2m", "weather_code", "wind_speed_10m", "wind_direction_10m", "rain", "is_day", "precipitation_probability"]
+    weather_variables = ["temperature_2m", "weather_code", "wind_speed_10m", "wind_direction_10m", "is_day", "precipitation_probability", "relative_humidity_2m"]
     params = {
         "latitude": id["lat"],
         "longitude": id["lon"],
         "hourly":  weather_variables,
         "current": weather_variables,
         "temperature_unit": "celsius",
+        "wind_speed_unit": "kmh",
         "timezone":"auto",
     }
 
@@ -86,68 +104,85 @@ def GET_DATA(id):
     response.raise_for_status()
     data = response.json()
     st.write(data)
-    
-    current_temperature = data["current"]["temperature_2m"]
-    current_time = data["current"]["time"]
 
-    current_code = data["current"]["weather_code"]
+    #temp diffs
+    current_dt = datetime.fromisoformat(data["current"]["time"])
+    idx = max(
+        i for i, t in enumerate(data["hourly"]["time"])
+        if datetime.fromisoformat(t) < current_dt
+    )
+    temp_diff = data["current"]["temperature_2m"] - data["hourly"]["temperature_2m"][idx]
+    temp_diff = round(temp_diff, 1)
+    st.session_state.temp_diff = temp_diff
+    st.session_state.temp_diff_f = int(round(temp_diff * 9 / 5))
+    #current data
+    current_data = {
+        "time": data["current"]["time"],
+        "temperature": data["current"]["temperature_2m"],
+        "weather_code": data["current"]["weather_code"],
+        "wind_speed": data["current"]["wind_speed_10m"],
+        "wind_direction": data["current"]["wind_direction_10m"],
+        "is_day": data["current"]["is_day"],
+        "precipitation_probability": data["current"]["precipitation_probability"],
+        "humidity": data["current"]["relative_humidity_2m"]
+    }
+    #hourl data
+    hourly_data = {
+        "time": data["hourly"]["time"],
+        "temperature": data["hourly"]["temperature_2m"],
+        "weather_code": data["hourly"]["weather_code"],
+        "wind_speed": data["hourly"]["wind_speed_10m"],
+        "wind_direction": data["hourly"]["wind_direction_10m"],
+        "is_day": data["hourly"]["is_day"],
+        "precipitation_probability": data["hourly"]["precipitation_probability"],
+        "humidity": data["hourly"]["relative_humidity_2m"]
+    }
+    #replace current time value in hourly data
+    current_dt = datetime.fromisoformat(current_data["time"])
+    idx = max(
+        i for i, t in enumerate(hourly_data["time"])
+        if datetime.fromisoformat(t) <= current_dt
+    )
+    #replacing all current values in hourly data
+    for key in current_data:
+        if key in hourly_data:
+            hourly_data[key][idx] = current_data[key]
+    #deleting all 
+    for key in hourly_data:
+        hourly_data[key] = hourly_data[key][idx:]
+    #decoding each weathercode
+    hourly_data["weather_emoji"] = [decode_weathercode(c, d)[0] for c, d in zip(hourly_data["weather_code"], hourly_data["is_day"])]
+    hourly_data["weather_text"]  = [decode_weathercode(c, d)[1] for c, d in zip(hourly_data["weather_code"], hourly_data["is_day"])]
+    del hourly_data["weather_code"]
+    del hourly_data["is_day"]
+    #decoding each wind direction
+    hourly_data["wind_acronym"] = [decode_wind_direction(a)[0] for a in hourly_data["wind_direction"]]
+    hourly_data["wind_point"]   = [decode_wind_direction(a)[1] for a in hourly_data["wind_direction"]]
+    del hourly_data["wind_direction"]
+    #separating df by week
+    week_data = {}
+    for i, t in enumerate(hourly_data["time"]):
+        day = datetime.strptime(t, "%Y-%m-%dT%H:%M").strftime("%A").lower()
+        row = {k: hourly_data[k][i] for k in hourly_data}
+        week_data.setdefault(day, []).append(row)
+    for d in week_data:
+        week_data[d] = pd.DataFrame(week_data[d])
+    #down to max 8 rows in each DF
+    for d in week_data:
+        df = week_data[d]
+        if len(df) > 8:
+            idx = np.linspace(0, len(df) - 1, 8, dtype=int)
+            week_data[d] = df.iloc[idx].reset_index(drop=True)
+    #adding fahrenheit column
+    for d in week_data:
+        df = week_data[d]
+        df["temperature"] = df["temperature"].round().astype(int)
+        df["wind_speed"]  = df["wind_speed"].round().astype(int)
+        df["temperature_f"] = (df["temperature"] * 9 / 5 + 32).round().astype(int)
 
-    hourly_temperature = data["hourly"]["temperature_2m"]
-    hourly_temperature = [round(i) for i in hourly_temperature]
-    hourly_time = data["hourly"]["time"]
-    hourly_code = data["hourly"]["weather_code"]
-    hourly_description_text = [decode_weathercode(c)[1] for c in hourly_code]
-    hourly_description_emoji = [decode_weathercode(c)[0] for c in hourly_code]
-    
-    if (current_time[:-2] + "00") == current_time:
-        st.session_state.past_temp = hourly_temperature[hourly_time.index(current_time) - 1]
-    else:
-        st.session_state.past_temp = hourly_temperature[hourly_time.index(current_time[:-2] + "00")]
-    
-    temp_unit = data["current_units"]["temperature_2m"]
-
-    week_temperature = pd.DataFrame({
-        "time": hourly_time,
-        "temperature_2m": hourly_temperature,
-        "description_text": hourly_description_text,
-        "description_emoji": hourly_description_emoji
-    })
-    week_temperature["weekday"] = week_temperature["time"].apply(get_week_day)
-    week_temperature["time"] = pd.to_datetime(week_temperature["time"])
-
-    week_dict = {}
-    for day in week_temperature["weekday"].unique():  
-        week_dict[day] = week_temperature[week_temperature["weekday"] == day]\
-                            .drop(columns="weekday")\
-                            .reset_index(drop=True)
-
-    for i, day in enumerate(list(week_dict.keys())):
-        if i == 0:
-            week_dict[day] = week_dict[day][
-                week_dict[day]["time"] >= (current_time[:-2] + "00")
-            ].reset_index(drop=True)
-
-            week_dict[day].loc[0, "time"] = current_time
-            week_dict[day].loc[0, "temperature_2m"] = current_temperature
-            if len(week_dict[day]) > 8:
-                week_dict[day] = week_dict[day].iloc[
-                    np.linspace(0, len(week_dict[day]) - 1, 8).astype(int)
-                ].reset_index(drop=True)
-        else:
-            week_dict[day] = week_dict[day].iloc[::3].reset_index(drop=True)
-    for day in week_dict:
-        week_dict[day]["time"] = pd.to_datetime(
-            week_dict[day]["time"]
-        ).dt.strftime("%H:%M")
-
-    #st.write(week_dict)
-    st.session_state.current_temp = current_temperature
-    st.session_state.current_time = current_time
-    st.session_state.current_week_day = get_week_day(current_time)
-    st.session_state.weather_description = decode_weathercode(current_code)
-    st.session_state.temp_diff = st.session_state.current_temp - st.session_state.past_temp
-    st.session_state.temp_unit = temp_unit
-    st.session_state.week_temperature_data = week_dict
+    st.session_state.weather_data = week_data
+    st.write(st.session_state.weather_data)
+    st.dataframe(st.session_state.weather_data['saturday'])
 
 def search_city(city):
     with st.spinner("Wait for it..."):
@@ -240,9 +275,11 @@ def main():
                 st.write(chart)
 
     with col4:
-        st.markdown(body=f"Rain<br>Humidity<br>Wind",
-                        text_alignment="center",
+        st.markdown(body=f"Rain: <br>Humidity: <br>Wind: ",
+                        text_alignment="justify",
                         unsafe_allow_html=True,
                         )
-if st.session_state.current_city:
+if False:
     main()
+
+#problema quando o grafico so tem um dado
