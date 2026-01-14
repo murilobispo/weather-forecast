@@ -13,9 +13,12 @@ initial_states = {
     "weather_data": "",
     "temp_diff": 0,
     "temp_diff_f": 0,
-    "temp_unit": "",
-    "temp_metric": 0,
-    "current_week_day": "",
+    "fahrenheit": False,
+    "week_day": "",
+    "week_day_cache": "",
+    "chart_click": {},
+    'force_default' : False,
+    'new_data': True
 }
 
 for key, value in initial_states.items():
@@ -103,8 +106,7 @@ def GET_DATA(id):
     response = requests.get(url, params=params, timeout=10)
     response.raise_for_status()
     data = response.json()
-    st.write(data)
-
+    #st.write(data)
     #temp diffs
     current_dt = datetime.fromisoformat(data["current"]["time"])
     idx = max(
@@ -114,7 +116,7 @@ def GET_DATA(id):
     temp_diff = data["current"]["temperature_2m"] - data["hourly"]["temperature_2m"][idx]
     temp_diff = round(temp_diff, 1)
     st.session_state.temp_diff = temp_diff
-    st.session_state.temp_diff_f = int(round(temp_diff * 9 / 5))
+    st.session_state.temp_diff_f = round(temp_diff * 9 / 5, 1)
     #current data
     current_data = {
         "time": data["current"]["time"],
@@ -173,6 +175,12 @@ def GET_DATA(id):
         if len(df) > 8:
             idx = np.linspace(0, len(df) - 1, 8, dtype=int)
             week_data[d] = df.iloc[idx].reset_index(drop=True)
+    #formating time
+    for df in week_data.values():
+        df["time"] = (
+            pd.to_datetime(df["time"])
+            .dt.strftime("%H:%M")
+        )
     #adding fahrenheit column
     for d in week_data:
         df = week_data[d]
@@ -181,8 +189,8 @@ def GET_DATA(id):
         df["temperature_f"] = (df["temperature"] * 9 / 5 + 32).round().astype(int)
 
     st.session_state.weather_data = week_data
-    st.write(st.session_state.weather_data)
-    st.dataframe(st.session_state.weather_data['saturday'])
+    st.session_state.week_day = st.session_state.week_day_cache = (get_week_day(data["current"]["time"]))
+    st.session_state.new_data = True
 
 def search_city(city):
     with st.spinner("Wait for it..."):
@@ -230,56 +238,84 @@ if city_input:
 
 @st.fragment
 def main():
-    if "current_week_day" not in st.session_state or st.session_state.current_week_day not in st.session_state.week_temperature_data:
-        st.session_state.current_week_day = list(st.session_state.week_temperature_data.keys())[0]
-    st.segmented_control(
-        label="Week Selection",
-        label_visibility="collapsed",
-        options=list(st.session_state.week_temperature_data.keys()),
-        format_func=lambda x: x[:3],
-        key="current_week_day"
-    )
+    data = st.session_state.weather_data[st.session_state.week_day]
+    st.toggle(label="°F", value=st.session_state.fahrenheit, key="fahrenheit")
 
-    col0, col1 = st.columns([2,1],
-                            vertical_alignment="center",
-                            gap="medium",
+    temp_unit = '°F' if st.session_state.fahrenheit else '°C'
+    temp_col = 'temperature_f' if st.session_state.fahrenheit else 'temperature'
+    temp_diff = st.session_state.temp_diff_f if st.session_state.fahrenheit else st.session_state.temp_diff
+    
+    chart_selection = st.session_state.get('chart_click', {}).get('selection', {}).get('points')
+    first_day = next(iter(st.session_state.weather_data))
+    is_first_day = st.session_state.week_day == first_day
+
+    if chart_selection and not st.session_state.new_data and not st.session_state.force_default:
+        data_idx = chart_selection[0]['point_index']
+    elif is_first_day:
+        data_idx = 0  
+    else:
+        data_idx = data[temp_col].idxmax()
+
+    metric_text = f"{data['weather_emoji'][data_idx]} {data[temp_col][data_idx]} {temp_unit}"
+    
+    if not is_first_day and not chart_selection:
+        most_common_weather = data['weather_text'].value_counts().idxmax()
+        aux_text = f"{st.session_state.week_day}<br>{most_common_weather}"
+    else:
+        aux_text = f"{st.session_state.week_day}, {data['time'][data_idx]}<br>{data['weather_text'][data_idx]}"
+
+    show_delta = temp_diff != 0 and data_idx == 0 and is_first_day
+    st.session_state.new_data = False
+    st.session_state.force_default = False
+    
+    with st.container(horizontal_alignment="center"):
+        col1, col2 = st.columns([2,1],vertical_alignment="center",gap="medium")     
+        with col1:
+            subCol1, subCol2 = st.columns(2,vertical_alignment="center",)
+            with subCol1:
+                st.metric(label=st.session_state.current_city, 
+                          value=metric_text, 
+                          delta= f'{temp_diff} {temp_unit}' if show_delta else None,
+                          width="stretch",
+                         )
+            with subCol2:
+                st.markdown(body=f"**Weather**<br>" + aux_text,
+                            text_alignment="right",
+                            unsafe_allow_html=True,
+                            width="stretch"
                             )
-    with col0:
-        subCol0, subCol1 = st.columns(2,
-                                    vertical_alignment="center",
-                                    )
-        with subCol0:
-            metric = st.metric(label=st.session_state.current_city, 
-                            value=f"{st.session_state.weather_description[0]}{round(st.session_state.current_temp)} {st.session_state.temp_unit}", 
-                            delta= None if st.session_state.temp_diff == 0 else f"{round(st.session_state.temp_diff, 1)} {st.session_state.temp_unit}",
-                            width="stretch",
-                            )
-        with subCol1:
-            st.markdown(body=f"**Weather**<br>{st.session_state.current_week_day}, {st.session_state.current_time[-5:]}<br>{st.session_state.weather_description[1]}",
-                        text_alignment="right",
-                        unsafe_allow_html=True,
-                        width="stretch"
-                        )
-    with col1:
-        st.image("https://png.pngtree.com/thumb_back/fh260/background/20240408/pngtree-clouds-in-sky-sky-in-summer-weather-upstairs-summer-day-image_15651093.jpg", 
-                width="stretch",
-                )
+            tab1, tab2, tab3 = st.tabs(["Temperature", "Rain", "Wind"])
+            with tab1:
+                fig = temperature_line_chart(data, "time", temp_col)
+                chart = st.plotly_chart(fig, theme="streamlit", 
+                                on_select="rerun", 
+                                config={"displayModeBar": False},
+                                key="chart_click")
+                    
+            def on_change():
+                if st.session_state.week_day is None:
+                    st.session_state.week_day = st.session_state.week_day_cache
+                else:
+                    st.session_state.force_default = True
+                    st.session_state.week_day_cache = st.session_state.week_day  
+                
+            _, subcol2, _= st.columns([1, 11, 1],vertical_alignment="center",)
+            with subcol2:
+                st.segmented_control(label="Week Selection",
+                            label_visibility="collapsed",
+                            options=st.session_state.weather_data,
+                            format_func=lambda x: x[:3],
+                            selection_mode="single",
+                            key="week_day",
+                            on_change=on_change
+                        )  
+        #with col2:
+           #st.image("https://png.pngtree.com/thumb_back/fh260/background/20240408/pngtree-clouds-in-sky-sky-in-summer-weather-upstairs-summer-day-image_15651093.jpg", 
+                    #width="stretch",)
 
-    col3, col4 = st.columns([2, 1], vertical_alignment="center")
-    with col3:
-        tab1, tab2, tab3 = st.tabs(["Temperature", "Rain", "Wind"])
-        with tab1:
-            fig = temperature_line_chart(st.session_state.week_temperature_data[st.session_state.current_week_day], "time", 'temperature_2m')
-            chart = st.plotly_chart(fig, theme="streamlit", on_select="rerun", config={"displayModeBar": False})
-            if chart:
-                st.write(chart)
-
-    with col4:
-        st.markdown(body=f"Rain: <br>Humidity: <br>Wind: ",
-                        text_alignment="justify",
-                        unsafe_allow_html=True,
-                        )
-if False:
+    #st.write(data)
+    
+if st.session_state.current_city:
     main()
 
 #problema quando o grafico so tem um dado
