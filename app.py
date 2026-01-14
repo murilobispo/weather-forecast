@@ -3,20 +3,20 @@ import pandas as pd
 import numpy as np
 import requests
 from datetime import datetime
-from charts import temperature_line_chart
+from charts import temperature_chart
+from charts import rain_chart
 
-st.set_page_config(page_title="Weather App", 
-                   layout="centered")
+st.set_page_config(page_title='Weather App', layout='centered')
 
 initial_states = {
-    "current_city": "",
-    "weather_data": "",
-    "temp_diff": 0,
-    "temp_diff_f": 0,
-    "fahrenheit": False,
-    "week_day": "",
-    "week_day_cache": "",
-    "chart_click": {},
+    'current_city': '',
+    'weather_data': '',
+    'temp_diff': 0,
+    'temp_diff_f': 0,
+    'fahrenheit0': False,
+    'week_day': '',
+    'week_day_cache': '',
+    'chart_click': {},
     'force_default' : False,
     'new_data': True
 }
@@ -242,62 +242,81 @@ def main():
     st.toggle(label="°F", value=st.session_state.fahrenheit, key="fahrenheit")
 
     temp_unit = '°F' if st.session_state.fahrenheit else '°C'
-    temp_col = 'temperature_f' if st.session_state.fahrenheit else 'temperature'
+    temp_col  ='temperature_f' if st.session_state.fahrenheit else 'temperature'
     temp_diff = st.session_state.temp_diff_f if st.session_state.fahrenheit else st.session_state.temp_diff
+    chart_get_idx = st.session_state.get('chart_click', {}).get('selection', {}).get('points')
+    data_idx = 0
+    show_delta = False
+    first_day = next(iter(st.session_state.weather_data))
     
     chart_selection = st.session_state.get('chart_click', {}).get('selection', {}).get('points')
     first_day = next(iter(st.session_state.weather_data))
     is_first_day = st.session_state.week_day == first_day
-
-    if chart_selection and not st.session_state.new_data and not st.session_state.force_default:
-        data_idx = chart_selection[0]['point_index']
-    elif is_first_day:
-        data_idx = 0  
+    if st.session_state.new_data:
+            metric_text = f'{data['weather_emoji'][data_idx]} {data[temp_col][data_idx]} {temp_unit}'
+            aux_text = f'{st.session_state.week_day}, {data['time'][data_idx]}<br>{data['weather_text'][data_idx]}'
+            show_delta = (
+                temp_diff != 0
+                and data_idx == 0
+                and first_day == st.session_state.week_day
+            )
     else:
-        data_idx = data[temp_col].idxmax()
+        if (st.session_state.force_default or not chart_get_idx) and first_day == st.session_state.week_day:
+            data_idx = 0
+            metric_text = f'{data['weather_emoji'][data_idx]} {data[temp_col][data_idx]} {temp_unit}'
+            aux_text = f'{st.session_state.week_day}, {data['time'][data_idx]}<br>{data['weather_text'][data_idx]}'
+            show_delta = temp_diff != 0 and data_idx == 0
+        elif (st.session_state.force_default or not chart_get_idx):
+            aux_idx = data[temp_col].idxmax()
+            metric_text = f'{data['weather_emoji'][aux_idx]} {data[temp_col][aux_idx]} {temp_unit}'
+            aux_text = f'{st.session_state.week_day}<br>{data['weather_text'].value_counts().idxmax()}'
+        else:
+            data_idx = chart_get_idx[0]['point_index']
+            metric_text = f'{data['weather_emoji'][data_idx]} {data[temp_col][data_idx]} {temp_unit}'
+            aux_text = f'{st.session_state.week_day}, {data['time'][data_idx]}<br>{data['weather_text'][data_idx]}'
+            show_delta = (
+                temp_diff != 0
+                and data_idx == 0
+                and first_day == st.session_state.week_day
+            )
 
-    metric_text = f"{data['weather_emoji'][data_idx]} {data[temp_col][data_idx]} {temp_unit}"
-    
-    if not is_first_day and not chart_selection:
-        most_common_weather = data['weather_text'].value_counts().idxmax()
-        aux_text = f"{st.session_state.week_day}<br>{most_common_weather}"
-    else:
-        aux_text = f"{st.session_state.week_day}, {data['time'][data_idx]}<br>{data['weather_text'][data_idx]}"
-
-    show_delta = temp_diff != 0 and data_idx == 0 and is_first_day
     st.session_state.new_data = False
     st.session_state.force_default = False
     
-    with st.container(horizontal_alignment="center"):
-        col1, col2 = st.columns([2,1],vertical_alignment="center",gap="medium")     
+    with st.container(horizontal_alignment='center'):
+        col1, col2 = st.columns([2,1],vertical_alignment='center',gap='medium')     
         with col1:
-            subCol1, subCol2 = st.columns(2,vertical_alignment="center",)
+            subCol1, subCol2 = st.columns(2,vertical_alignment='center')
             with subCol1:
                 st.metric(label=st.session_state.current_city, 
                           value=metric_text, 
                           delta= f'{temp_diff} {temp_unit}' if show_delta else None,
-                          width="stretch",
+                          width='stretch',
+                          height=110,
                          )
             with subCol2:
-                st.markdown(body=f"**Weather**<br>" + aux_text,
-                            text_alignment="right",
+                st.markdown(body=f'**Weather**<br>' + aux_text,
+                            text_alignment='right',
                             unsafe_allow_html=True,
-                            width="stretch"
+                            width='stretch'
                             )
-            tab1, tab2, tab3 = st.tabs(["Temperature", "Rain", "Wind"])
+            tab1, tab2, tab3 = st.tabs(['Temperature', 'Rain', 'Wind'])
             with tab1:
-                fig = temperature_line_chart(data, "time", temp_col)
-                chart = st.plotly_chart(fig, theme="streamlit", 
-                                on_select="rerun", 
-                                config={"displayModeBar": False},
-                                key="chart_click")
+                fig = temperature_chart(data, 'time', temp_col)
+                st.plotly_chart(fig, theme='streamlit', 
+                                on_select='rerun', 
+                                config={'displayModeBar': False},
+                                key='chart_click')
+            with tab2:
+                fig = rain_chart(data, 'time','precipitation_probability')
+                st.plotly_chart(fig, theme='streamlit', config={'displayModeBar': False}) 
                     
             def on_change():
                 if st.session_state.week_day is None:
                     st.session_state.week_day = st.session_state.week_day_cache
                 else:
                     st.session_state.force_default = True
-                    st.session_state.week_day_cache = st.session_state.week_day  
+                    st.session_state.week_day_cache = st.session_state.week_day 
                 
             _, subcol2, _= st.columns([1, 11, 1],vertical_alignment="center",)
             with subcol2:
