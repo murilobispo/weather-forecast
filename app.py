@@ -5,15 +5,17 @@ import requests
 from datetime import datetime
 from charts import temperature_chart
 from charts import rain_chart
+from charts import wind_chart
 
 st.set_page_config(page_title='Weather App', layout='centered')
+
 
 initial_states = {
     'current_city': '',
     'weather_data': '',
     'temp_diff': 0,
     'temp_diff_f': 0,
-    'fahrenheit0': False,
+    'fahrenheit': False,
     'week_day': '',
     'week_day_cache': '',
     'chart_click': {},
@@ -32,15 +34,24 @@ def get_week_day(time):
 def decode_wind_direction(angle):
     directions = [
         ("N", "North"),
+        ("NNE", "North-Northeast"),
         ("NE", "Northeast"),
+        ("ENE", "East-Northeast"),
         ("E", "East"),
+        ("ESE", "East-Southeast"),
         ("SE", "Southeast"),
+        ("SSE", "South-Southeast"),
         ("S", "South"),
+        ("SSW", "South-Southwest"),
         ("SW", "Southwest"),
+        ("WSW", "West-Southwest"),
         ("W", "West"),
-        ("NW", "Northwest")
+        ("WNW", "West-Northwest"),
+        ("NW", "Northwest"),
+        ("NNW", "North-Northwest"),
     ]
-    index = int((angle + 22.5) % 360 // 45)
+
+    index = int((angle + 11.25) % 360 // 22.5)
     return [directions[index][0], directions[index][1]]
 
 def decode_weathercode(code, is_day=1):
@@ -160,7 +171,7 @@ def GET_DATA(id):
     #decoding each wind direction
     hourly_data["wind_acronym"] = [decode_wind_direction(a)[0] for a in hourly_data["wind_direction"]]
     hourly_data["wind_point"]   = [decode_wind_direction(a)[1] for a in hourly_data["wind_direction"]]
-    del hourly_data["wind_direction"]
+    #del hourly_data["wind_direction"]
     #separating df by week
     week_data = {}
     for i, t in enumerate(hourly_data["time"]):
@@ -283,7 +294,7 @@ def main():
     st.session_state.new_data = False
     st.session_state.force_default = False
     
-    with st.container(horizontal_alignment='center'):
+    with st.container(horizontal_alignment='center', gap=None):
         col1, col2 = st.columns([2,1],vertical_alignment='center',gap='medium')     
         with col1:
             subCol1, subCol2 = st.columns(2,vertical_alignment='center')
@@ -303,13 +314,17 @@ def main():
             tab1, tab2, tab3 = st.tabs(['Temperature', 'Rain', 'Wind'])
             with tab1:
                 fig = temperature_chart(data, 'time', temp_col)
-                st.plotly_chart(fig, theme='streamlit', 
+                st.plotly_chart(fig,
                                 on_select='rerun', 
                                 config={'displayModeBar': False},
                                 key='chart_click')
             with tab2:
                 fig = rain_chart(data, 'time','precipitation_probability')
-                st.plotly_chart(fig, theme='streamlit', config={'displayModeBar': False}) 
+                st.plotly_chart(fig, config={'displayModeBar': False}) 
+            with tab3:
+                fig = wind_chart(data)
+                st.plotly_chart(fig)
+                pass
                     
             def on_change():
                 if st.session_state.week_day is None:
@@ -318,7 +333,7 @@ def main():
                     st.session_state.force_default = True
                     st.session_state.week_day_cache = st.session_state.week_day 
                 
-            _, subcol2, _= st.columns([1, 11, 1],vertical_alignment="center",)
+            _, subcol2= st.columns([1, 11],vertical_alignment="center",gap=None)
             with subcol2:
                 st.segmented_control(label="Week Selection",
                             label_visibility="collapsed",
@@ -332,7 +347,7 @@ def main():
            #st.image("https://png.pngtree.com/thumb_back/fh260/background/20240408/pngtree-clouds-in-sky-sky-in-summer-weather-upstairs-summer-day-image_15651093.jpg", 
                     #width="stretch",)
 
-    #st.write(data)
+    st.dataframe(data)
     
 if st.session_state.current_city:
     main()
