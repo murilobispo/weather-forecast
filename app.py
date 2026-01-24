@@ -120,12 +120,16 @@ def GET_DATA(id):
     #st.write(data)
     #temp diffs
     current_dt = datetime.fromisoformat(data["current"]["time"])
-    idx = max(
+    past_indexes = [
         i for i, t in enumerate(data["hourly"]["time"])
         if datetime.fromisoformat(t) < current_dt
-    )
-    temp_diff = data["current"]["temperature_2m"] - data["hourly"]["temperature_2m"][idx]
-    temp_diff = round(temp_diff, 1)
+    ]
+    if not past_indexes:
+        temp_diff = 0.0
+    else:
+        idx = max(past_indexes)
+        temp_diff = data["current"]["temperature_2m"] - data["hourly"]["temperature_2m"][idx]
+        temp_diff = round(temp_diff, 1)
     st.session_state.temp_diff = temp_diff
     st.session_state.temp_diff_f = round(temp_diff * 9 / 5, 1)
     #current data
