@@ -1,5 +1,6 @@
 import plotly.express as px
-import streamlit as st
+import plotly.graph_objects as go
+
 def setup_chart(fig):
     fig.update_layout(height=225, xaxis_showgrid=False, yaxis_showgrid=False, xaxis_title=None, yaxis_title=None, dragmode=False, hovermode=False)
     fig.update_yaxes(showticklabels=False, fixedrange=True)
@@ -29,25 +30,34 @@ def rain_chart(df, x, y):
     
     return fig
 
-
-
-
-
-
-
-
-
-
-def wind_chart(df):
-    direcoes_ordem = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", 
-                      "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-    fig = px.bar_polar(
-        df, 
-        r="wind_speed",     
-        theta="wind_acronym", 
-        color="temperature",    
-        template="plotly_dark" ,
-        category_orders={"wind_acronym": direcoes_ordem}
-    )
+def wind_chart(df, x, y, z):
+    fig = go.Figure(go.Scatter(
+        x=df[x],
+        y=df[y],
+        mode="markers",
+        marker=dict(
+            symbol="arrow",
+            size=18,
+            color=df[y],
+            colorscale="Viridis",
+            cmin=df[y].min(),
+            cmax=df[y].max(),
+            showscale=True,
+            angle = (df[z] + 180) % 360,
+            angleref="up",
+            opacity=0.85,
+            colorbar=dict(
+                title="km/h",
+                tickvals=[df[y].min(), df[y].max()],
+                ticktext=[f"{df[y].min():.0f}", f"{df[y].max():.0f}"],
+                thickness=8,
+                len=1,
+                outlinewidth=0
+            )
+        ),
+        hoverinfo="skip"
+    ))
+    fig.update_layout(template="plotly", margin=dict(t=0))
+    fig = setup_chart(fig)
 
     return fig

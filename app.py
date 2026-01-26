@@ -32,6 +32,7 @@ def get_week_day(time):
     return dt.strftime("%A").lower()
 
 def decode_wind_direction(angle):
+    angle = (angle + 180) % 360
     directions = [
         ("N", "North"),
         ("NNE", "North-Northeast"),
@@ -299,7 +300,7 @@ def main():
     st.session_state.force_default = False
     
     with st.container(horizontal_alignment='center', gap=None):
-        col1, col2 = st.columns([2,1],vertical_alignment='center',gap='medium')     
+        col1, col2 = st.columns([2,1],vertical_alignment='top',gap='medium')     
         with col1:
             subCol1, subCol2 = st.columns(2,vertical_alignment='center')
             with subCol1:
@@ -326,8 +327,8 @@ def main():
                 fig = rain_chart(data, 'time','precipitation_probability')
                 st.plotly_chart(fig, config={'displayModeBar': False}) 
             with tab3:
-                fig = wind_chart(data)
-                st.plotly_chart(fig)
+                fig = wind_chart(data, 'time', 'wind_speed', 'wind_direction')
+                st.plotly_chart(fig, config={'displayModeBar': False}) 
                 pass
                     
             def on_change():
