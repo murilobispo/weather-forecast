@@ -1,0 +1,10 @@
+[theme]
+base = "light"
+primaryColor = "#cb785c"
+backgroundColor = "#ededE4"
+secondaryBackgroundColor = "#d6d5cb"
+font = "serif"
+baseFontSize=17
+
+[[theme.fontFaces]]
+family = "Lora"

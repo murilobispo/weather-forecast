@@ -12,12 +12,13 @@ def setup_chart(fig):
 def temperature_chart(df, x, y):
     fig = px.line(df, x=x, y=y)
     fig = setup_chart(fig)
-    fig.update_traces(fill='tozeroy', line=dict(color='#d2a906'), fillcolor='rgba(210,169,6,0.3)')
+    fig.update_traces(fill='tozeroy', line=dict(color='rgba(210,169,6,1)'), fillcolor='rgba(210,169,6,0.5)')
     fig.update_traces(mode='lines+text', text=df[y], textposition='top center', line_shape='spline')
     fig.update_xaxes(type='category', categoryorder='array', categoryarray=df[x])
     fig.update_xaxes(range=[-0.5, len(df[x]) - 0.5])
     fig.update_yaxes(range=[df[y].min() - 1, df[y].max() + 5])
     fig.update_layout(margin=dict(t=0))
+    fig.update_traces(hovertemplate="<extra></extra>")
 
     return fig
 
@@ -30,34 +31,33 @@ def rain_chart(df, x, y):
     
     return fig
 
-def wind_chart(df, x, y, z):
+def wind_chart(df, x, y, z, s):
     fig = go.Figure(go.Scatter(
         x=df[x],
         y=df[y],
-        mode="markers",
+        mode='markers',
+        customdata=df[s], 
         marker=dict(
-            symbol="arrow",
+            symbol='arrow',
             size=18,
             color=df[y],
-            colorscale="Viridis",
+            colorscale='Viridis',
             cmin=df[y].min(),
             cmax=df[y].max(),
-            showscale=True,
-            angle = (df[z] + 180) % 360,
+            showscale=False,
+            angle=(df[z] + 180) % 360,
             angleref="up",
-            opacity=0.85,
-            colorbar=dict(
-                title="km/h",
-                tickvals=[df[y].min(), df[y].max()],
-                ticktext=[f"{df[y].min():.0f}", f"{df[y].max():.0f}"],
-                thickness=8,
-                len=1,
-                outlinewidth=0
-            )
+            opacity=0.85
         ),
-        hoverinfo="skip"
+        hoverinfo='all', 
+        hovertemplate=(
+            '<b>Speed:</b> %{y} km/h<br>' +
+            '<b>Direction:</b> %{customdata}<br>' +
+            '<extra></extra>'
+        )
     ))
     fig.update_layout(template="plotly", margin=dict(t=0))
-    fig = setup_chart(fig)
-
+    fig.update_layout(height=225, dragmode=False)
+    fig.update_yaxes( gridcolor='#d6d5cb')
+    
     return fig
