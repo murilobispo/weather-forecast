@@ -94,7 +94,7 @@ def main():
                         value=metric_text, 
                         delta= f'{temp_diff} {temp_unit}' if show_delta else None,
                         width='stretch',
-                        height=110,
+                        height=120,
                         )
         with subCol2:
             st.markdown(body=f'**Weather**<br>' + aux_text,

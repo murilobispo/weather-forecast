@@ -4,7 +4,7 @@ primaryColor = "#cb785c"
 backgroundColor = "#ededE4"
 secondaryBackgroundColor = "#d6d5cb"
 font = "serif"
-baseFontSize=17
+baseFontSize=18
 
 [[theme.fontFaces]]
 family = "Lora"
