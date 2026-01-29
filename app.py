@@ -31,7 +31,7 @@ st.markdown('''
     }
 </style>
 ''', unsafe_allow_html=True)
-
+st.title("Weather Forecast", text_alignment="center")
 with st.container(horizontal_alignment='center'):
     city_input = st.text_input(label='city-input',
                             key='city-input',
